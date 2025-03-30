@@ -18,6 +18,7 @@
     "@pact-foundation/pact": "^15.0.1",
     "@pact-foundation/pact-node": "^10.18.0",
     "amqplib": "^0.10.7",
+    "axios": "^1.8.4",
     "bee-queue": "^1.6.1",
     "config": "^3.3.9",
     "dotenv": "^16.3.1",

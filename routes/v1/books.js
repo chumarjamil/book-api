@@ -8,6 +8,7 @@ const cache = require('../../utils/cache');
 const multer = require('multer');
 const io = require('../../sockets/booksSocket').getIO();
 const validator = require('../../utils/validator');
+const axios = require('axios'); // Add axios for making HTTP requests to webhooks
 
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -17,6 +18,21 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
+
+async function triggerWebhooks(event, data) {
+  try {
+    const { rows } = await pool.query('SELECT url FROM webhooks WHERE event = $1', [event]);
+    rows.forEach(async (row) => {
+      try {
+        await axios.post(row.url, data);
+      } catch (err) {
+        console.error(`Error sending webhook to ${row.url}:`, err.message);
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching webhooks:', err.message);
+  }
+}
 
 // GET all books with search, pagination, and sorting (optimized)
 router.get('/', [
@@ -65,7 +81,7 @@ router.get('/:id', cache.route(), async (req, res, next) => {
 });
 
 // POST a new book (with file upload and real time update)
-router.post('/', auth, authorize(['admin']), async (req, res, next) => {
+router.post('/', auth, authorize(['admin']), upload.single('coverImage'), async (req, res, next) => {
   const { error } = validator.validateBook(req.body);
   if (error) {
     return res.status(400).json({ message: error.details[0].message });
@@ -78,6 +94,7 @@ router.post('/', auth, authorize(['admin']), async (req, res, next) => {
     const insertedBook = rows[0];
 
     io.emit('bookUpdated', insertedBook); // Emit real-time update
+    await triggerWebhooks('book.created', insertedBook); // Trigger webhooks
 
     res.status(201).json(insertedBook);
   } catch (err) {
@@ -99,6 +116,7 @@ router.put('/:id', auth, authorize(['admin']), async (req, res, next) => {
     const updatedBook = rows[0];
 
     io.emit('bookUpdated', updatedBook); // Emit real-time update
+    await triggerWebhooks('book.updated', updatedBook); // Trigger webhooks
 
     res.json(updatedBook);
   } catch (err) {
@@ -114,6 +132,7 @@ router.delete('/:id', auth, authorize(['admin']), async (req, res, next) => {
     res.status(204).send();
 
     io.emit('bookDeleted', req.params.id); // emit real time delete.
+    await triggerWebhooks('book.deleted', { id: req.params.id }); // Trigger webhooks
   } catch (err) {
     next(err);
   }

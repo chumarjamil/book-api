@@ -13,6 +13,7 @@ const socketIo = require('socket.io');
 const path = require('path');
 const queue = require('./utils/queue');
 require('./jobs/report-generator'); // Start background job processor
+const webhooksRouter = require('./routes/v1/webhooks');
 
 const app = express();
 const server = http.createServer(app);
@@ -35,6 +36,7 @@ app.use('/v1/books', booksRouterV1);
 app.use('/health', healthRouter);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use(errorHandler);
+app.use('/v1/webhooks', webhooksRouter);
 
 server.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
