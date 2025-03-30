@@ -9,6 +9,7 @@ const multer = require('multer');
 const io = require('../../sockets/booksSocket').getIO();
 const validator = require('../../utils/validator');
 const axios = require('axios');
+const escape = require('escape-html');
 
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -63,7 +64,16 @@ router.get('/', [
     queryParams.push(limit, offset);
 
     const { rows } = await pool.query(queryStr, queryParams);
-    res.json(rows);
+
+    const encodedRows = rows.map((book) => ({
+      id: book.id,
+      title: escape(book.title),
+      author: escape(book.author),
+      cover_image: book.cover_image ? escape(book.cover_image) : null,
+      publication_date: book.publication_date ? escape(book.publication_date.toISOString().split('T')[0]) : null, // format date
+    }));
+
+    res.json(encodedRows);
   } catch (err) {
     next(err);
   }
@@ -74,7 +84,16 @@ router.get('/:id', cache.route(), async (req, res, next) => {
   try {
     const { rows } = await pool.query('SELECT id, title, author, cover_image, publication_date FROM books WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Book not found' });
-    res.json(rows[0]);
+
+    const encodedBook = {
+      id: rows[0].id,
+      title: escape(rows[0].title),
+      author: escape(rows[0].author),
+      cover_image: rows[0].cover_image ? escape(rows[0].cover_image) : null,
+      publication_date: rows[0].publication_date ? escape(rows[0].publication_date.toISOString().split('T')[0]) : null, // format date
+    };
+
+    res.json(encodedBook);
   } catch (err) {
     next(err);
   }
@@ -106,7 +125,15 @@ router.post('/', auth, authorize(['admin']), upload.single('coverImage'), [
     io.emit('bookUpdated', insertedBook);
     await triggerWebhooks('book.created', insertedBook);
 
-    res.status(201).json(insertedBook);
+    const encodedInsertedBook = {
+      id: insertedBook.id,
+      title: escape(insertedBook.title),
+      author: escape(insertedBook.author),
+      cover_image: insertedBook.cover_image ? escape(insertedBook.cover_image) : null,
+      publication_date: insertedBook.publication_date ? escape(insertedBook.publication_date.toISOString().split('T')[0]) : null, // format date
+    };
+
+    res.status(201).json(encodedInsertedBook);
   } catch (err) {
     next(err);
   }
@@ -128,9 +155,10 @@ router.put('/:id', auth, authorize(['admin']), [
 
   try {
     const { title, author, publication_date } = req.body;
+    const coverImageUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const { rows } = await pool.query(
       'UPDATE books SET title = COALESCE($1, title), author = COALESCE($2, author), cover_image = COALESCE($3, cover_image), publication_date = COALESCE($4, publication_date) WHERE id = $5 RETURNING id, title, author, cover_image, publication_date',
-      [title, author, req.file ? `/uploads/${req.file.filename}` : null, publication_date, req.params.id]
+      [title, author, coverImageUrl, publication_date, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Book not found' });
     const updatedBook = rows[0];
@@ -138,7 +166,15 @@ router.put('/:id', auth, authorize(['admin']), [
     io.emit('bookUpdated', updatedBook);
     await triggerWebhooks('book.updated', updatedBook);
 
-    res.json(updatedBook);
+    const encodedUpdatedBook = {
+      id: updatedBook.id,
+      title: escape(updatedBook.title),
+      author: escape(updatedBook.author),
+      cover_image: updatedBook.cover_image ? escape(updatedBook.cover_image) : null,
+      publication_date: updatedBook.publication_date ? escape(updatedBook.publication_date.toISOString().split('T')[0]) : null, // format date
+    };
+
+    res.json(encodedUpdatedBook);
   } catch (err) {
     next(err);
   }

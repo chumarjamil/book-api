@@ -8,7 +8,8 @@ const cache = require('../../utils/cache');
 const multer = require('multer');
 const io = require('../../sockets/booksSocket').getIO();
 const validator = require('../../utils/validator');
-const axios = require('axios'); // Add axios for making HTTP requests to webhooks
+const axios = require('axios');
+const escape = require('escape-html');
 
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -51,7 +52,7 @@ router.get('/', [
   const offset = (page - 1) * limit;
 
   try {
-    let queryStr = 'SELECT id, title, author, cover_image FROM books'; // Select only needed columns
+    let queryStr = 'SELECT id, title, author, cover_image FROM books';
     const queryParams = [];
 
     if (search) {
@@ -63,7 +64,15 @@ router.get('/', [
     queryParams.push(limit, offset);
 
     const { rows } = await pool.query(queryStr, queryParams);
-    res.json(rows);
+
+    const encodedRows = rows.map((book) => ({
+      id: book.id,
+      title: escape(book.title),
+      author: escape(book.author),
+      cover_image: book.cover_image ? escape(book.cover_image) : null,
+    }));
+
+    res.json(encodedRows);
   } catch (err) {
     next(err);
   }
@@ -74,7 +83,15 @@ router.get('/:id', cache.route(), async (req, res, next) => {
   try {
     const { rows } = await pool.query('SELECT id, title, author, cover_image FROM books WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Book not found' });
-    res.json(rows[0]);
+
+    const encodedBook = {
+      id: rows[0].id,
+      title: escape(rows[0].title),
+      author: escape(rows[0].author),
+      cover_image: rows[0].cover_image ? escape(rows[0].cover_image) : null,
+    };
+
+    res.json(encodedBook);
   } catch (err) {
     next(err);
   }
@@ -93,10 +110,17 @@ router.post('/', auth, authorize(['admin']), upload.single('coverImage'), async 
     const { rows } = await pool.query('INSERT INTO books (title, author, cover_image) VALUES ($1, $2, $3) RETURNING id, title, author, cover_image', [title, author, coverImageUrl]);
     const insertedBook = rows[0];
 
-    io.emit('bookUpdated', insertedBook); // Emit real-time update
-    await triggerWebhooks('book.created', insertedBook); // Trigger webhooks
+    io.emit('bookUpdated', insertedBook);
+    await triggerWebhooks('book.created', insertedBook);
 
-    res.status(201).json(insertedBook);
+    const encodedInsertedBook = {
+        id: insertedBook.id,
+        title: escape(insertedBook.title),
+        author: escape(insertedBook.author),
+        cover_image: insertedBook.cover_image ? escape(insertedBook.cover_image) : null,
+    }
+
+    res.status(201).json(encodedInsertedBook);
   } catch (err) {
     next(err);
   }
@@ -115,10 +139,17 @@ router.put('/:id', auth, authorize(['admin']), async (req, res, next) => {
     if (rows.length === 0) return res.status(404).json({ message: 'Book not found' });
     const updatedBook = rows[0];
 
-    io.emit('bookUpdated', updatedBook); // Emit real-time update
-    await triggerWebhooks('book.updated', updatedBook); // Trigger webhooks
+    io.emit('bookUpdated', updatedBook);
+    await triggerWebhooks('book.updated', updatedBook);
 
-    res.json(updatedBook);
+    const encodedUpdatedBook = {
+        id: updatedBook.id,
+        title: escape(updatedBook.title),
+        author: escape(updatedBook.author),
+        cover_image: updatedBook.cover_image ? escape(updatedBook.cover_image) : null,
+    }
+
+    res.json(encodedUpdatedBook);
   } catch (err) {
     next(err);
   }
@@ -131,8 +162,8 @@ router.delete('/:id', auth, authorize(['admin']), async (req, res, next) => {
     if (rows.length === 0) return res.status(404).json({ message: 'Book not found' });
     res.status(204).send();
 
-    io.emit('bookDeleted', req.params.id); // emit real time delete.
-    await triggerWebhooks('book.deleted', { id: req.params.id }); // Trigger webhooks
+    io.emit('bookDeleted', req.params.id);
+    await triggerWebhooks('book.deleted', { id: req.params.id });
   } catch (err) {
     next(err);
   }
