@@ -1,0 +1,22 @@
+{
+    "db": {
+      "user": "your_dev_user",
+      "password": "your_dev_password",
+      "host": "localhost",
+      "port": 5432,
+      "database": "book_api_dev"
+    },
+    "jwtSecret": "your_secret_key",
+    "port": 3000,
+    "rateLimit": {
+      "windowMs": 15 * 60 * 1000,
+      "max": 100
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379
+    },
+    "rabbitmq": {
+      "url": "amqp://localhost"
+    }
+  }
